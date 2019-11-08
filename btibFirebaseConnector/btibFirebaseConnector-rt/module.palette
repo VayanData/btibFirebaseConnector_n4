@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bajaObjectGraph version="1.0" >
     <p m="b=baja" t="b:UnrestrictedFolder">
-        <!-- IotHubConnector -->
-        <p n="FirebaseConnector" m="bfc=btibFirebaseConnector" t="bfc:BFirebaseConnector"/>
+        <p n="FirebaseConnector" m="bfc=btibFirebaseConnector" t="bfc:FirebaseConnector"/>
     </p>
 </bajaObjectGraph>

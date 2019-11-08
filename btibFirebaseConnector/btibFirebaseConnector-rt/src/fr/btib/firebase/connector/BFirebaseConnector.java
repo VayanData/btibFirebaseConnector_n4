@@ -1,6 +1,7 @@
 package fr.btib.firebase.connector;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.Firestore;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -13,22 +14,21 @@ import fr.btib.connector.realtime.interfaces.BIRealtimeDeviceExtension;
 import fr.btib.connector.realtime.interfaces.BIRealtimePointExtension;
 import fr.btib.connector.realtime.messages.outgoing.IOutgoingPointMessage;
 import fr.btib.core.BtibLogger;
+import fr.btib.core.tool.BtibIconTool;
 import fr.btib.core.tool.CompTool;
 
 import javax.baja.nre.annotations.NiagaraProperty;
 import javax.baja.nre.annotations.NiagaraType;
-import javax.baja.sys.BAbsTime;
-import javax.baja.sys.Property;
-import javax.baja.sys.Sys;
-import javax.baja.sys.Type;
+import javax.baja.sys.*;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
+
 
 @NiagaraType
 @NiagaraProperty(
@@ -39,8 +39,8 @@ import java.util.concurrent.Executors;
 public class BFirebaseConnector extends BRealtimeConnector
 {
     /*+ ------------ BEGIN BAJA AUTO GENERATED CODE ------------ +*/
-    /*@ $com.btib.btibFirebaseConnector.BFirebaseConnector(157606577)1.0$ @*/
-    /* Generated Thu Nov 07 16:48:09 CET 2019 by Slot-o-Matic (c) Tridium, Inc. 2012 */
+    /*@ $fr.btib.firebase.connector.BFirebaseConnector(157606577)1.0$ @*/
+    /* Generated Fri Nov 08 10:36:55 CET 2019 by Slot-o-Matic (c) Tridium, Inc. 2012 */
 
     ////////////////////////////////////////////////////////////////
     // Property "firebaseKeyJson"
@@ -89,24 +89,27 @@ public class BFirebaseConnector extends BRealtimeConnector
     /*+ ------------ END BAJA AUTO GENERATED CODE -------------- +*/
 
     private static final BtibLogger LOG = BtibLogger.getLogger(TYPE);
+    private static final BIcon ICON = BtibIconTool.getComponentIcon(TYPE);
+    private static final String DATABASE_URL = "https://realtimeconnectordemo.firebaseio.com";
+
 
     private FirebaseApp firebaseApp = null;
     private Firestore firestore = null;
-    private ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) Executors::newCachedThreadPool);
+    private final ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) Executors::newCachedThreadPool);
 
     @Override
     public void doPing()
     {
-        this.setLastAttempt(BAbsTime.now());
-        this.pingService()
+        setLastAttempt(BAbsTime.now());
+        pingService()
             .exceptionally(e -> {
                 CompTool.setFault(this, e.getMessage(), e, LOG);
-                this.setLastFailure(BAbsTime.now());
+                setLastFailure(BAbsTime.now());
                 return null;
             })
             .thenRun(() -> {
                 CompTool.setOk(this);
-                this.setLastSuccess(BAbsTime.now());
+                setLastSuccess(BAbsTime.now());
             });
     }
 
@@ -201,7 +204,11 @@ public class BFirebaseConnector extends BRealtimeConnector
     @Override
     public CompletableFuture<Void> pingService()
     {
-        return this.doAsync(() -> this.getFirestore().listCollections().forEach(System.out::println));
+        return doAsync(() -> {
+            firestore = getFirestore();
+            Iterable<CollectionReference> collections = firestore.getCollections();
+            collections.forEach(collectionReference -> System.out.println(collectionReference.getId()));
+        });
     }
 
     @Override
@@ -218,43 +225,86 @@ public class BFirebaseConnector extends BRealtimeConnector
         if (!Sys.isStationStarted())
         {
             // When station is booting
-            this.firebaseApp = this.initializeFirebase();
+            firebaseApp = initializeFirebase();
         }
     }
 
-    private Firestore getFirestore() throws IOException
+    private Firestore getFirestore() throws Exception
     {
-        if (this.firestore == null)
+        if (firestore == null)
         {
-            if (this.firebaseApp == null)
+            if (firebaseApp == null)
             {
-                this.firebaseApp = this.initializeFirebase();
+                firebaseApp = initializeFirebase();
             }
-            this.firestore = FirestoreClient.getFirestore();
+            firestore = AccessController.doPrivileged((PrivilegedAction<Firestore>) () -> {
+                try
+                {
+                    return FirestoreClient.getFirestore();
+                }
+                catch (Exception e)
+                {
+                    e.printStackTrace();
+                    return null;
+                }
+            });
         }
-        return this.firestore;
+        return firestore;
     }
 
-    private FirebaseApp initializeFirebase() throws IOException
+    private FirebaseApp initializeFirebase() throws Exception
+
     {
-        ByteArrayInputStream credentialsStream = new ByteArrayInputStream(getFirebaseKeyJson().getBytes());
-        FirebaseOptions options = FirebaseOptions.builder()
-            .setCredentials(GoogleCredentials.fromStream(credentialsStream))
-            .build();
-        return FirebaseApp.initializeApp(options);
+        AtomicReference<Exception> innerException = new AtomicReference<>();
+        FirebaseApp app = AccessController.doPrivileged((PrivilegedAction<FirebaseApp>) () -> {
+            try
+            {
+                ByteArrayInputStream credentialsStream = new ByteArrayInputStream(getFirebaseKeyJson().getBytes());
+                FirebaseOptions options = new FirebaseOptions.Builder()
+                    .setCredentials(GoogleCredentials.fromStream(credentialsStream))
+                    .setDatabaseUrl(DATABASE_URL)
+                    .build();
+                return FirebaseApp.initializeApp(options);
+            }
+            catch (Exception exception)
+            {
+                innerException.set(exception);
+                return null;
+            }
+        });
+        if (innerException.get() != null)
+        {
+            throw innerException.get();
+        }
+        return app;
     }
 
     private CompletableFuture<Void> doAsync(RunnableThrowable runnableThrowable)
     {
         CompletableFuture<Void> future = new CompletableFuture<>();
-        if (!this.getEnabled())
+        if (!getEnabled())
         {
             future.completeExceptionally(new ConnectorDisabledException());
         }
-        this.executorService.submit(() -> {
+        executorService.submit(() -> {
             try
             {
-                runnableThrowable.run();
+                AtomicReference<Exception> exceptionAtomicReference = new AtomicReference<>();
+                AccessController.doPrivileged((PrivilegedAction<Object>) () -> {
+                    try
+                    {
+                        runnableThrowable.run();
+                    }
+                    catch (Exception e)
+                    {
+                        exceptionAtomicReference.set(e);
+                    }
+                    return null;
+                });
+                if (exceptionAtomicReference.get() != null)
+                {
+                    throw exceptionAtomicReference.get();
+                }
                 future.complete(null);
             }
             catch (Exception e)
@@ -263,5 +313,11 @@ public class BFirebaseConnector extends BRealtimeConnector
             }
         });
         return future;
+    }
+
+    @Override
+    public BIcon getIcon()
+    {
+        return ICON;
     }
 }

@@ -11,8 +11,8 @@ import javax.baja.sys.Type;
 public class BFirebaseDeviceExt extends BDeviceRealtimeConnectorExt
 {
     /*+ ------------ BEGIN BAJA AUTO GENERATED CODE ------------ +*/
-    /*@ $com.btib.btibFirebaseConnector.BFirebaseDeviceExt(2979906276)1.0$ @*/
-    /* Generated Thu Nov 07 16:30:23 CET 2019 by Slot-o-Matic (c) Tridium, Inc. 2012 */
+    /*@ $fr.btib.firebase.connector.BFirebaseDeviceExt(2979906276)1.0$ @*/
+    /* Generated Fri Nov 08 10:38:45 CET 2019 by Slot-o-Matic (c) Tridium, Inc. 2012 */
 
     ////////////////////////////////////////////////////////////////
     // Type
