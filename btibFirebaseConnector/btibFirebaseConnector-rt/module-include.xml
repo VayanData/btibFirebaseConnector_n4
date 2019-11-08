@@ -1,0 +1,5 @@
+<types>
+  <!--fr.btib.firebase.connector-->
+  <type class="fr.btib.firebase.connector.BFirebaseConnector" name="FirebaseConnector"/>
+  <type class="fr.btib.firebase.connector.BFirebaseDeviceExt" name="FirebaseDeviceExt"/>
+</types>

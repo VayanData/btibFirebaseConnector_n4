@@ -1,0 +1,21 @@
+/* Module Build File */
+
+description     = "a connector for firebase"
+ext {
+}
+niagaraModule {
+  moduleName = "btibFirebaseConnector"
+  preferredSymbol = "bfc"
+  runtimeProfile = "wb"
+}
+
+dependencies {
+  compile "Tridium:nre:4.8"
+  compile "Tridium:baja:4.8"
+  compile project(":btibFirebaseConnector-rt")
+}
+
+moduleTestJar {
+  from('srcTest') {
+  }
+}

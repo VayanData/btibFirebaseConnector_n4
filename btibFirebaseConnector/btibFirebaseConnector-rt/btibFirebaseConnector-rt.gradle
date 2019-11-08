@@ -1,0 +1,32 @@
+/* Module Build File */
+
+description = "a connector for firebase"
+ext {
+}
+niagaraModule {
+    moduleName = "btibFirebaseConnector"
+    preferredSymbol = "bfc"
+    runtimeProfile = "rt"
+
+    modulePart {
+        name = "btibFirebaseConnector-wb"
+        runtimeProfile = "wb"
+    }
+}
+
+dependencies {
+    // Niagara
+    compile "Tridium:nre:4.8"
+    compile "Tridium:baja:4.8"
+    compile "Tridium:control-rt:4.6"
+    // btib
+    compile "BTIB:btibCore-rt:46"
+    compile "BTIB:btibConnector-rt:46"
+    // external
+    uberjar 'com.google.firebase:firebase-admin:6.11.0'
+}
+
+moduleTestJar {
+    from('srcTest') {
+    }
+}

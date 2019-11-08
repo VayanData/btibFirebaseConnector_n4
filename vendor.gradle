@@ -1,0 +1,9 @@
+/*
+ * Copyright 2019 BTIB, All Rights Reserved.
+ */
+/* Vendor Configuration File */
+group = 'BTIB'
+
+def moduleVersion = '46.14.0'
+def moduleVersionPatch = [:]
+version = "${moduleVersion}${moduleVersionPatch.get(project.name, '')}"
