@@ -1,28 +1,32 @@
 package fr.btib.firebase.connector;
 
 import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.firestore.CollectionReference;
-import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.*;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.cloud.FirestoreClient;
+import com.tridium.json.JSONObject;
 import fr.btib.connector.exception.ConnectorDisabledException;
 import fr.btib.connector.interfaces.RunnableThrowable;
 import fr.btib.connector.realtime.BRealtimeConnector;
 import fr.btib.connector.realtime.interfaces.BIIncomingMessageListener;
 import fr.btib.connector.realtime.interfaces.BIRealtimeDeviceExtension;
 import fr.btib.connector.realtime.interfaces.BIRealtimePointExtension;
+import fr.btib.connector.realtime.messages.incoming.factory.IncomingMessageFactory;
 import fr.btib.connector.realtime.messages.outgoing.IOutgoingPointMessage;
+import fr.btib.connector.realtime.messages.outgoing.StatusPointMessage;
 import fr.btib.core.BtibLogger;
 import fr.btib.core.tool.BtibIconTool;
 import fr.btib.core.tool.CompTool;
 
+import javax.annotation.Nullable;
 import javax.baja.nre.annotations.NiagaraProperty;
 import javax.baja.nre.annotations.NiagaraType;
 import javax.baja.sys.*;
 import java.io.ByteArrayInputStream;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -61,7 +65,7 @@ public class BFirebaseConnector extends BRealtimeConnector
      */
     public String getFirebaseKeyJson()
     {
-        return getString(firebaseKeyJson);
+        return this.getString(firebaseKeyJson);
     }
 
     /**
@@ -71,7 +75,7 @@ public class BFirebaseConnector extends BRealtimeConnector
      */
     public void setFirebaseKeyJson(String v)
     {
-        setString(firebaseKeyJson, v, null);
+        this.setString(firebaseKeyJson, v, null);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -91,25 +95,29 @@ public class BFirebaseConnector extends BRealtimeConnector
     private static final BtibLogger LOG = BtibLogger.getLogger(TYPE);
     private static final BIcon ICON = BtibIconTool.getComponentIcon(TYPE);
     private static final String DATABASE_URL = "https://realtimeconnectordemo.firebaseio.com";
+    private static final String DEVICES_COLLECTION = "devices";
+    private static final String POINTS_COLLECTION = "points";
+    private static final String MESSAGES_COLLECTION = "messages";
 
-
+    private final ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) Executors::newCachedThreadPool);
+    private final Map<String, BIIncomingMessageListener> listeners = new HashMap<>();
     private FirebaseApp firebaseApp = null;
     private Firestore firestore = null;
-    private final ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) Executors::newCachedThreadPool);
+    private ListenerRegistration messageListenerRegistration;
 
     @Override
     public void doPing()
     {
-        setLastAttempt(BAbsTime.now());
-        pingService()
+        this.setLastAttempt(BAbsTime.now());
+        this.pingService()
             .exceptionally(e -> {
                 CompTool.setFault(this, e.getMessage(), e, LOG);
-                setLastFailure(BAbsTime.now());
+                this.setLastFailure(BAbsTime.now());
                 return null;
             })
             .thenRun(() -> {
                 CompTool.setOk(this);
-                setLastSuccess(BAbsTime.now());
+                this.setLastSuccess(BAbsTime.now());
             });
     }
 
@@ -120,101 +128,120 @@ public class BFirebaseConnector extends BRealtimeConnector
     @Override
     public Class<? extends BIRealtimeDeviceExtension> getDeviceExtensionClass()
     {
-        return null;
+        return BFirebaseDeviceExt.class;
     }
 
     @Override
     public Class<? extends BIRealtimePointExtension> getPointExtensionClass()
     {
-        return null;
+        return BFirebasePointExt.class;
     }
 
     @Override
-    public CompletableFuture<Void> registerDevice(String s)
+    public CompletableFuture<Void> registerDevice(String deviceId)
     {
-        return null;
+        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).create(new HashMap<>()).get());
     }
 
     @Override
-    public CompletableFuture<Void> registerPoint(String s, String s1)
+    public CompletableFuture<Void> registerPoint(String deviceId, String pointId)
     {
-        return null;
+        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).create(new HashMap<>()).get());
     }
 
     @Override
-    public CompletableFuture<Void> unregisterDevice(String s)
+    public CompletableFuture<Void> unregisterDevice(String deviceId)
     {
-        return null;
+        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).delete().get());
     }
 
     @Override
-    public CompletableFuture<Void> unregisterPoint(String s, String s1)
+    public CompletableFuture<Void> unregisterPoint(String deviceId, String pointId)
     {
-        return null;
+        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).delete().get());
     }
 
     @Override
-    public CompletableFuture<Void> openConnectionForDevice(String s)
+    public CompletableFuture<Void> openConnectionForDevice(String deviceId)
     {
-        return null;
+        return this.doAsync(this::getFirestore);
     }
 
     @Override
     public CompletableFuture<Void> closeConnectionForDevice(String s)
     {
-        return null;
+        // Don't need to close the firebase connection
+        return CompletableFuture.completedFuture(null);
     }
 
     @Override
-    public boolean isDeviceConnected(String s) throws Exception
+    public boolean isDeviceConnected(String deviceId)
     {
-        return false;
+        return this.firestore != null;
     }
 
     @Override
-    public CompletableFuture<Void> sendMessage(String s, IOutgoingPointMessage iOutgoingPointMessage)
+    public CompletableFuture<Void> sendMessage(String deviceId, IOutgoingPointMessage message)
     {
-        return null;
+        return this.doAsync(() -> {
+            if (message instanceof StatusPointMessage)
+            {
+                StatusPointMessage statusPointMessage = (StatusPointMessage) message;
+                HashMap<String, Object> fields = new HashMap<>();
+                fields.put(StatusPointMessage.STATUS, statusPointMessage.getStatus());
+                fields.put(StatusPointMessage.VALUE, statusPointMessage.getValue());
+                fields.put(StatusPointMessage.TIMESTAMP, statusPointMessage.getTimestamp());
+                this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(statusPointMessage.getPointId()).set(fields).get();
+            }
+            else
+            {
+                throw new Exception("Unsupported message type: " + message.getClass().getName());
+            }
+        });
     }
 
     @Override
-    public CompletableFuture<Void> sendTagsForDevice(String s, Map<String, String> map)
+    public CompletableFuture<Void> sendTagsForDevice(String deviceId, Map<String, String> tags)
     {
-        return null;
+        return this.doAsync(() -> {
+            Map<String, Object> fields = new HashMap<>();
+            fields.put("tags", tags);
+            this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).set(fields).get();
+        });
     }
 
     @Override
-    public CompletableFuture<Void> sendTagsForPoint(String s, String s1, Map<String, String> map)
+    public CompletableFuture<Void> sendTagsForPoint(String deviceId, String pointId, Map<String, String> tags)
     {
-        return null;
+        return this.doAsync(() -> {
+            Map<String, Object> fields = new HashMap<>();
+            fields.put("tags", tags);
+            this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).set(fields).get();
+        });
     }
 
     @Override
-    public void subscribeToIncomingMessages(String s, BIIncomingMessageListener biIncomingMessageListener) throws Exception
+    public void subscribeToIncomingMessages(String deviceId, BIIncomingMessageListener incomingMessageListener) throws Exception
     {
-
+        this.listeners.put(deviceId, incomingMessageListener);
     }
 
     @Override
-    public void unsubscribeToIncomingMessages(String s, BIIncomingMessageListener biIncomingMessageListener) throws Exception
+    public void unsubscribeToIncomingMessages(String deviceId, BIIncomingMessageListener incomingMessageListener)
     {
-
+        this.listeners.remove(deviceId);
     }
 
     @Override
     public CompletableFuture<Void> pingService()
     {
-        return doAsync(() -> {
-            firestore = getFirestore();
-            Iterable<CollectionReference> collections = firestore.getCollections();
-            collections.forEach(collectionReference -> System.out.println(collectionReference.getId()));
-        });
+        return this.doAsync(() -> this.getFirestore().getCollections().forEach(CollectionReference::getId));
     }
 
     @Override
     public BtibLogger getBtibLogger()
     {
-        return null;
+        return LOG;
     }
 
     @Override
@@ -225,19 +252,45 @@ public class BFirebaseConnector extends BRealtimeConnector
         if (!Sys.isStationStarted())
         {
             // When station is booting
-            firebaseApp = initializeFirebase();
+            this.firebaseApp = this.initializeFirebase();
+        }
+    }
+
+    @Override
+    public void changed(Property property, Context context)
+    {
+        if (!this.isRunning())
+        {
+            return;
+        }
+
+        if (property == firebaseKeyJson)
+        {
+            try
+            {
+                this.firestore = null;
+                this.firebaseApp = this.initializeFirebase();
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
         }
     }
 
     private Firestore getFirestore() throws Exception
     {
-        if (firestore == null)
+        if (this.firestore == null)
         {
-            if (firebaseApp == null)
+            if (this.firebaseApp == null)
             {
-                firebaseApp = initializeFirebase();
+                this.firebaseApp = this.initializeFirebase();
             }
-            firestore = AccessController.doPrivileged((PrivilegedAction<Firestore>) () -> {
+            if (this.messageListenerRegistration != null)
+            {
+                this.messageListenerRegistration.remove();
+            }
+            this.firestore = AccessController.doPrivileged((PrivilegedAction<Firestore>) () -> {
                 try
                 {
                     return FirestoreClient.getFirestore();
@@ -248,18 +301,61 @@ public class BFirebaseConnector extends BRealtimeConnector
                     return null;
                 }
             });
+            this.listenForMessages();
         }
-        return firestore;
+        return this.firestore;
     }
 
-    private FirebaseApp initializeFirebase() throws Exception
+    /**
+     * Start limning for messages
+     */
+    private void listenForMessages()
+    {
+        this.messageListenerRegistration = this.firestore.collection(MESSAGES_COLLECTION).addSnapshotListener(new EventListener<QuerySnapshot>()
+        {
+            @Override
+            public void onEvent(@Nullable QuerySnapshot snapshots, @Nullable FirestoreException error)
+            {
+                if (snapshots != null)
+                {
+                    snapshots.getDocumentChanges().forEach(document -> {
+                        try
+                        {
+                            String jsonMessage = new JSONObject(document.getDocument().getData()).toString();
+                            BFirebaseConnector.this.listeners.values().forEach(listener -> {
+                                try
+                                {
+                                    listener.handleIncomingMessage(IncomingMessageFactory.create(jsonMessage));
+                                }
+                                catch (Exception e)
+                                {
+                                    LOG.severe(e.getMessage());
+                                }
+                            });
+                        }
+                        catch (Exception e)
+                        {
+                            LOG.severe(e.getMessage());
+                        }
+                    });
+                }
+            }
+        });
+    }
 
+    /**
+     * Init the firebase application instance
+     *
+     * @return
+     * @throws Exception
+     */
+    private FirebaseApp initializeFirebase() throws Exception
     {
         AtomicReference<Exception> innerException = new AtomicReference<>();
         FirebaseApp app = AccessController.doPrivileged((PrivilegedAction<FirebaseApp>) () -> {
             try
             {
-                ByteArrayInputStream credentialsStream = new ByteArrayInputStream(getFirebaseKeyJson().getBytes());
+                ByteArrayInputStream credentialsStream = new ByteArrayInputStream(this.getFirebaseKeyJson().getBytes());
                 FirebaseOptions options = new FirebaseOptions.Builder()
                     .setCredentials(GoogleCredentials.fromStream(credentialsStream))
                     .setDatabaseUrl(DATABASE_URL)
@@ -282,11 +378,11 @@ public class BFirebaseConnector extends BRealtimeConnector
     private CompletableFuture<Void> doAsync(RunnableThrowable runnableThrowable)
     {
         CompletableFuture<Void> future = new CompletableFuture<>();
-        if (!getEnabled())
+        if (!this.getEnabled())
         {
             future.completeExceptionally(new ConnectorDisabledException());
         }
-        executorService.submit(() -> {
+        this.executorService.submit(() -> {
             try
             {
                 AtomicReference<Exception> exceptionAtomicReference = new AtomicReference<>();

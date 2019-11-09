@@ -2,5 +2,9 @@
 <bajaObjectGraph version="1.0" >
     <p m="b=baja" t="b:UnrestrictedFolder">
         <p n="FirebaseConnector" m="bfc=btibFirebaseConnector" t="bfc:FirebaseConnector"/>
+        <p n="Extensions"  t="b:UnrestrictedFolder">
+            <p n="FirebaseDeviceExt"  t="bfc:FirebaseDeviceExt"/>
+            <p n="FirebasePointExt"  t="bfc:FirebasePointExt"/>
+        </p>
     </p>
 </bajaObjectGraph>
