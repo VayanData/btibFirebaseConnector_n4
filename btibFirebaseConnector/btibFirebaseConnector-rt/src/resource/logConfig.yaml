@@ -1,2 +1,4 @@
 btibFirebaseConnector:
   - BFirebaseConnector
+  - BFirebaseDeviceExt
+  - BFirebasePointExt

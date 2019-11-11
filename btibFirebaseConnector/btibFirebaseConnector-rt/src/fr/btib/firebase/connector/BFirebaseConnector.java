@@ -91,15 +91,18 @@ public class BFirebaseConnector extends BRealtimeConnector
     public static final Type TYPE = Sys.loadType(BFirebaseConnector.class);
 
     /*+ ------------ END BAJA AUTO GENERATED CODE -------------- +*/
-
+    // the logger
     private static final BtibLogger LOG = BtibLogger.getLogger(TYPE);
+    // Use the icon on the icon resource
     private static final BIcon ICON = BtibIconTool.getComponentIcon(TYPE);
+    // the firebase url
     private static final String DATABASE_URL = "https://realtimeconnectordemo.firebaseio.com";
     private static final String DEVICES_COLLECTION = "devices";
     private static final String POINTS_COLLECTION = "points";
     private static final String MESSAGES_COLLECTION = "messages";
-
+    // the workers thread pool
     private final ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) Executors::newCachedThreadPool);
+    // Devices incoming messages listeners
     private final Map<String, BIIncomingMessageListener> listeners = new HashMap<>();
     private FirebaseApp firebaseApp = null;
     private Firestore firestore = null;
@@ -119,10 +122,6 @@ public class BFirebaseConnector extends BRealtimeConnector
                 CompTool.setOk(this);
                 this.setLastSuccess(BAbsTime.now());
             });
-    }
-
-    private void setLastAttempt()
-    {
     }
 
     @Override
@@ -278,6 +277,11 @@ public class BFirebaseConnector extends BRealtimeConnector
         }
     }
 
+    /**
+     * Create the firestore lazily
+     * @return
+     * @throws Exception
+     */
     private Firestore getFirestore() throws Exception
     {
         if (this.firestore == null)
@@ -375,6 +379,11 @@ public class BFirebaseConnector extends BRealtimeConnector
         return app;
     }
 
+    /**
+     * Submit the task an returns the future result
+     * @param runnableThrowable
+     * @return
+     */
     private CompletableFuture<Void> doAsync(RunnableThrowable runnableThrowable)
     {
         CompletableFuture<Void> future = new CompletableFuture<>();
