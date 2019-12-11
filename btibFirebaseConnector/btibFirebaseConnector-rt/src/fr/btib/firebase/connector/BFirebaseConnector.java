@@ -13,6 +13,7 @@ import fr.btib.connector.realtime.interfaces.BIIncomingMessageListener;
 import fr.btib.connector.realtime.interfaces.BIRealtimeDeviceExtension;
 import fr.btib.connector.realtime.interfaces.BIRealtimePointExtension;
 import fr.btib.connector.realtime.messages.incoming.factory.IncomingMessageFactory;
+import fr.btib.connector.realtime.messages.outgoing.AlarmPointMessage;
 import fr.btib.connector.realtime.messages.outgoing.IOutgoingPointMessage;
 import fr.btib.connector.realtime.messages.outgoing.StatusPointMessage;
 import fr.btib.core.BtibLogger;
@@ -26,12 +27,15 @@ import javax.baja.sys.*;
 import java.io.ByteArrayInputStream;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.AbstractMap;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 
 @NiagaraType
@@ -98,6 +102,7 @@ public class BFirebaseConnector extends BRealtimeConnector
     // the firebase url
     private static final String DATABASE_URL = "https://realtimeconnectordemo.firebaseio.com";
     private static final String DEVICES_COLLECTION = "devices";
+    private static final String ALARMS_COLLECTION = "alarms";
     private static final String POINTS_COLLECTION = "points";
     private static final String MESSAGES_COLLECTION = "messages";
     // the workers thread pool
@@ -139,19 +144,21 @@ public class BFirebaseConnector extends BRealtimeConnector
     @Override
     public CompletableFuture<Void> registerDevice(String deviceId)
     {
-        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).create(new HashMap<>()).get());
+        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).set(new HashMap<>()).get());
     }
 
     @Override
     public CompletableFuture<Void> registerPoint(String deviceId, String pointId)
     {
-        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).create(new HashMap<>()).get());
+        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).set(new HashMap<>()).get());
     }
 
     @Override
     public CompletableFuture<Void> unregisterDevice(String deviceId)
     {
-        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).delete().get());
+        return this.doAsync(() -> {
+            this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).delete().get();
+        });
     }
 
     @Override
@@ -167,7 +174,7 @@ public class BFirebaseConnector extends BRealtimeConnector
     }
 
     @Override
-    public CompletableFuture<Void> closeConnectionForDevice(String s)
+    public CompletableFuture<Void> closeConnectionForDevice(String deviceId)
     {
         // Don't need to close the firebase connection
         return CompletableFuture.completedFuture(null);
@@ -186,11 +193,19 @@ public class BFirebaseConnector extends BRealtimeConnector
             if (message instanceof StatusPointMessage)
             {
                 StatusPointMessage statusPointMessage = (StatusPointMessage) message;
-                HashMap<String, Object> fields = new HashMap<>();
+                Map<String, Object> fields = new HashMap<>();
                 fields.put(StatusPointMessage.STATUS, statusPointMessage.getStatus());
                 fields.put(StatusPointMessage.VALUE, statusPointMessage.getValue());
                 fields.put(StatusPointMessage.TIMESTAMP, statusPointMessage.getTimestamp());
-                this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(statusPointMessage.getPointId()).set(fields).get();
+                this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(statusPointMessage.getPointId()).update(fields).get();
+            }
+            else if (message instanceof AlarmPointMessage)
+            {
+                AlarmPointMessage alarmPointMessage = (AlarmPointMessage) message;
+                Map<String, Object> data = alarmPointMessage.getData();
+                this.clearNulls(data);
+                Map<String, Object> fields = data.entrySet().stream().map(pair -> new AbstractMap.SimpleEntry<String, Object>(pair.getKey(), pair.getValue().toString())).collect(Collectors.toMap(AbstractMap.SimpleEntry::getKey, AbstractMap.SimpleEntry::getValue));
+                this.getFirestore().collection(deviceId).add(fields).get();
             }
             else
             {
@@ -203,6 +218,7 @@ public class BFirebaseConnector extends BRealtimeConnector
     public CompletableFuture<Void> sendTagsForDevice(String deviceId, Map<String, String> tags)
     {
         return this.doAsync(() -> {
+            this.clearNulls(tags);
             Map<String, Object> fields = new HashMap<>();
             fields.put("tags", tags);
             this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).set(fields).get();
@@ -213,9 +229,10 @@ public class BFirebaseConnector extends BRealtimeConnector
     public CompletableFuture<Void> sendTagsForPoint(String deviceId, String pointId, Map<String, String> tags)
     {
         return this.doAsync(() -> {
+            this.clearNulls(tags);
             Map<String, Object> fields = new HashMap<>();
             fields.put("tags", tags);
-            this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).set(fields).get();
+            this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).update(fields).get();
         });
     }
 
@@ -277,8 +294,29 @@ public class BFirebaseConnector extends BRealtimeConnector
         }
     }
 
+    ////////////////////////////////////////////////////////////////
+    // Utils
+    ////////////////////////////////////////////////////////////////
+
     /**
-     * Create the firestore lazily
+     * Remove null values
+     *
+     * @param data
+     * @param <T>
+     */
+    private <T> void clearNulls(Map<String, T> data)
+    {
+        List<String> nullKeys = data.entrySet().stream()
+            .filter(pair -> pair.getValue() == null)
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toList());
+
+        nullKeys.forEach(data::remove);
+    }
+
+    /**
+     * Create the firestore client   lazily
+     *
      * @return
      * @throws Exception
      */
@@ -311,7 +349,7 @@ public class BFirebaseConnector extends BRealtimeConnector
     }
 
     /**
-     * Start limning for messages
+     * Start listening for messages
      */
     private void listenForMessages()
     {
@@ -381,6 +419,7 @@ public class BFirebaseConnector extends BRealtimeConnector
 
     /**
      * Submit the task an returns the future result
+     *
      * @param runnableThrowable
      * @return
      */
@@ -419,6 +458,10 @@ public class BFirebaseConnector extends BRealtimeConnector
         });
         return future;
     }
+
+    ////////////////////////////////////////////////////////////////
+    // Getters/Setters
+    ////////////////////////////////////////////////////////////////
 
     @Override
     public BIcon getIcon()
