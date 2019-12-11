@@ -8,4 +8,4 @@ given as first argument.
 ---------------------------------------------------------------------------------------------------
 :REM
 
-xcopy "%NIAGARA_HOME%\modules\btibIoTHub-*.jar" %1 /Y
+xcopy "%NIAGARA_HOME%\modules\btibFirebaseConnector-*.jar" %1 /Y

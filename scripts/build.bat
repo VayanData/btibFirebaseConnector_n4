@@ -36,24 +36,24 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 
 :: Obfuscation
-call scripts\obfuscation.bat btibIoTHub
+call scripts\obfuscation.bat btibFirebaseConnector
 IF %ERRORLEVEL% NEQ 0 ( 
    exit %ERRORLEVEL% 
 )
 
 :: Signature
 echo Remove Niagara auto-generated signature...
-call %NIAGARA_HOME%\..\.btib\lib\7-Zip\7z d %NIAGARA_HOME%\modules\btibIoTHub-rt.jar META-INF\*.RSA META-INF\*.SF -bso0
-call %NIAGARA_HOME%\..\.btib\lib\7-Zip\7z d %NIAGARA_HOME%\modules\btibIoTHub-wb.jar META-INF\*.RSA META-INF\*.SF -bso0
+call %NIAGARA_HOME%\..\.btib\lib\7-Zip\7z d %NIAGARA_HOME%\modules\btibFirebaseConnector-rt.jar META-INF\*.RSA META-INF\*.SF -bso0
+call %NIAGARA_HOME%\..\.btib\lib\7-Zip\7z d %NIAGARA_HOME%\modules\btibFirebaseConnector-wb.jar META-INF\*.RSA META-INF\*.SF -bso0
 
 echo Signing with USB Token...
-call scripts\signer.bat btibIoTHub-rt %1 %2
-call scripts\signer.bat btibIoTHub-wb %1 %2
+call scripts\signer.bat btibFirebaseConnector-rt %1 %2
+call scripts\signer.bat btibFirebaseConnector-wb %1 %2
 
 exit %ERRORLEVEL%
 
 :removeJars
-IF EXIST %NIAGARA_HOME%\modules\btibIoTHub-* (
-    del %NIAGARA_HOME%\modules\btibIoTHub-*
+IF EXIST %NIAGARA_HOME%\modules\btibFirebaseConnector-* (
+    del %NIAGARA_HOME%\modules\btibFirebaseConnector-*
 )
 exit /b
