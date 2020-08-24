@@ -14,16 +14,23 @@ niagaraModule {
     }
 }
 
+jar {
+    from("src") {
+        include "resource/**/*"
+    }
+}
+
 dependencies {
     // Niagara
-    compile "Tridium:nre:4.8"
+    compile "Tridium:alarm-rt:4.6"
     compile "Tridium:baja:4.8"
     compile "Tridium:control-rt:4.6"
+    compile "Tridium:nre:4.8"
     // btib
-    compile "BTIB:btibCore-rt:46"
     compile "BTIB:btibConnector-rt:46"
+    compile "BTIB:btibCore-rt:46"
     // external
-    uberjar 'com.google.firebase:firebase-admin:6.11.0'
+    uberjar 'com.google.firebase:firebase-admin:6.0.0'
 }
 
 moduleTestJar {

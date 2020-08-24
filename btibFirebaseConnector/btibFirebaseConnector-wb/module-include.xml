@@ -1,2 +1,4 @@
 <types>
+  <!--fr.btib.firebase.connector.ui-->
+  <type class="fr.btib.firebase.connector.ui.BFirebaseRealtimeConnectorFE" name="FirebaseRealtimeConnectorFE"/>
 </types>

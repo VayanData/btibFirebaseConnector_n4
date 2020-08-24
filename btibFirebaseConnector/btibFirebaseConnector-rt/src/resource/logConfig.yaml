@@ -1,0 +1,5 @@
+btibFirebaseConnector:
+  - BFirebaseAlarmRecipient
+  - BFirebaseConnector
+  - BFirebaseDeviceExt
+  - BFirebasePointExt

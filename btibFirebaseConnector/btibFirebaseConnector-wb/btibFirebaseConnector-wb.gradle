@@ -13,6 +13,12 @@ dependencies {
   compile "Tridium:nre:4.8"
   compile "Tridium:baja:4.8"
   compile project(":btibFirebaseConnector-rt")
+
+  // wb
+  compile "BTIB:btibConnector-wb:46"
+  compile "BTIB:btibCore-wb:46"
+  compile "Tridium:bajaui-wb:4.6"
+  compile "Tridium:workbench-wb:4.6"
 }
 
 moduleTestJar {
