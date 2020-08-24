@@ -1,6 +1,7 @@
 package fr.btib.firebase.connector;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.firestore.EventListener;
 import com.google.cloud.firestore.*;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -12,10 +13,8 @@ import fr.btib.connector.realtime.BRealtimeConnector;
 import fr.btib.connector.realtime.interfaces.BIIncomingMessageListener;
 import fr.btib.connector.realtime.interfaces.BIRealtimeDeviceExtension;
 import fr.btib.connector.realtime.interfaces.BIRealtimePointExtension;
-import fr.btib.connector.realtime.messages.incoming.factory.IncomingMessageFactory;
-import fr.btib.connector.realtime.messages.outgoing.AlarmPointMessage;
-import fr.btib.connector.realtime.messages.outgoing.IOutgoingPointMessage;
-import fr.btib.connector.realtime.messages.outgoing.StatusPointMessage;
+import fr.btib.connector.realtime.messages.incoming.IIncomingMessage;
+import fr.btib.connector.realtime.messages.outgoing.OutgoingPointMessage;
 import fr.btib.core.BtibLogger;
 import fr.btib.core.tool.BtibIconTool;
 import fr.btib.core.tool.CompTool;
@@ -27,10 +26,7 @@ import javax.baja.sys.*;
 import java.io.ByteArrayInputStream;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.util.AbstractMap;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -103,15 +99,20 @@ public class BFirebaseConnector extends BRealtimeConnector
     private static final String DATABASE_URL = "https://realtimeconnectordemo.firebaseio.com";
     private static final String DEVICES_COLLECTION = "devices";
     private static final String ALARMS_COLLECTION = "alarms";
-    private static final String POINTS_COLLECTION = "points";
+    private static final String POINTS_VALUES_COLLECTION = "pointsValues";
+    private static final String POINTS_STATUSES_COLLECTION = "pointsStatus";
     private static final String MESSAGES_COLLECTION = "messages";
     // the workers thread pool
     private final ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) Executors::newCachedThreadPool);
     // Devices incoming messages listeners
-    private final Map<String, BIIncomingMessageListener> listeners = new HashMap<>();
+    private final Map<String, Set<BIIncomingMessageListener>> listeners = new HashMap<>();
     private FirebaseApp firebaseApp = null;
     private Firestore firestore = null;
     private ListenerRegistration messageListenerRegistration;
+
+    ////////////////////////////////////////////////////////////////
+    // BExternalConnector
+    ////////////////////////////////////////////////////////////////
 
     @Override
     public void doPing()
@@ -128,6 +129,56 @@ public class BFirebaseConnector extends BRealtimeConnector
                 this.setLastSuccess(BAbsTime.now());
             });
     }
+
+    ////////////////////////////////////////////////////////////////
+    // BrealtimeConnector
+    ////////////////////////////////////////////////////////////////
+
+    @Override
+    public BFrozenEnum getDeviceTagsDestination()
+    {
+        return BDataDestinationEnum.devicesCollection;
+    }
+
+    @Override
+    public BFrozenEnum getDeviceAlarmDestination()
+    {
+        return BDataDestinationEnum.alarmsCollection;
+    }
+
+    @Override
+    public BFrozenEnum getPointTagsDestination()
+    {
+        return BDataDestinationEnum.pointsValuesCollection;
+    }
+
+    @Override
+    public BFrozenEnum getPointStatusDestination()
+    {
+        return BDataDestinationEnum.pointsStatusCollection;
+    }
+
+    @Override
+    public BFrozenEnum getPointValueDestination()
+    {
+        return BDataDestinationEnum.pointsValuesCollection;
+    }
+
+    @Override
+    public ExecutorService getRegistryExecutorService()
+    {
+        return this.executorService;
+    }
+
+    @Override
+    public ExecutorService getConnectionExecutorService()
+    {
+        return this.executorService;
+    }
+
+    ////////////////////////////////////////////////////////////////
+    // BIRealtimeConnector
+    ////////////////////////////////////////////////////////////////
 
     @Override
     public Class<? extends BIRealtimeDeviceExtension> getDeviceExtensionClass()
@@ -150,7 +201,10 @@ public class BFirebaseConnector extends BRealtimeConnector
     @Override
     public CompletableFuture<Void> registerPoint(String deviceId, String pointId)
     {
-        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).set(new HashMap<>()).get());
+        return this.doAsync(() -> {
+            this.getFirestore().collection(POINTS_VALUES_COLLECTION).document(pointId).set(new HashMap<>()).get();
+            this.getFirestore().collection(POINTS_STATUSES_COLLECTION).document(pointId).set(new HashMap<>()).get();
+        });
     }
 
     @Override
@@ -164,7 +218,10 @@ public class BFirebaseConnector extends BRealtimeConnector
     @Override
     public CompletableFuture<Void> unregisterPoint(String deviceId, String pointId)
     {
-        return this.doAsync(() -> this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).delete().get());
+        return this.doAsync(() -> {
+            this.getFirestore().collection(POINTS_VALUES_COLLECTION).document(pointId).delete().get();
+            this.getFirestore().collection(POINTS_STATUSES_COLLECTION).document(pointId).delete().get();
+        });
     }
 
     @Override
@@ -187,41 +244,13 @@ public class BFirebaseConnector extends BRealtimeConnector
     }
 
     @Override
-    public CompletableFuture<Void> sendMessage(String deviceId, IOutgoingPointMessage message)
-    {
-        return this.doAsync(() -> {
-            if (message instanceof StatusPointMessage)
-            {
-                StatusPointMessage statusPointMessage = (StatusPointMessage) message;
-                Map<String, Object> fields = new HashMap<>();
-                fields.put(StatusPointMessage.STATUS, statusPointMessage.getStatus());
-                fields.put(StatusPointMessage.VALUE, statusPointMessage.getValue());
-                fields.put(StatusPointMessage.TIMESTAMP, statusPointMessage.getTimestamp());
-                this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(statusPointMessage.getPointId()).update(fields).get();
-            }
-            else if (message instanceof AlarmPointMessage)
-            {
-                AlarmPointMessage alarmPointMessage = (AlarmPointMessage) message;
-                Map<String, Object> data = alarmPointMessage.getData();
-                this.clearNulls(data);
-                Map<String, Object> fields = data.entrySet().stream().map(pair -> new AbstractMap.SimpleEntry<String, Object>(pair.getKey(), pair.getValue().toString())).collect(Collectors.toMap(AbstractMap.SimpleEntry::getKey, AbstractMap.SimpleEntry::getValue));
-                this.getFirestore().collection(deviceId).add(fields).get();
-            }
-            else
-            {
-                throw new Exception("Unsupported message type: " + message.getClass().getName());
-            }
-        });
-    }
-
-    @Override
     public CompletableFuture<Void> sendTagsForDevice(String deviceId, Map<String, String> tags)
     {
         return this.doAsync(() -> {
             this.clearNulls(tags);
             Map<String, Object> fields = new HashMap<>();
             fields.put("tags", tags);
-            this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).set(fields).get();
+            this.getFirestore().collection(getDestination(DEVICE_TAGS_DESTINATION_SLOT)).document(deviceId).set(fields).get();
         });
     }
 
@@ -232,14 +261,63 @@ public class BFirebaseConnector extends BRealtimeConnector
             this.clearNulls(tags);
             Map<String, Object> fields = new HashMap<>();
             fields.put("tags", tags);
-            this.getFirestore().collection(DEVICES_COLLECTION).document(deviceId).collection(POINTS_COLLECTION).document(pointId).update(fields).get();
+            this.getFirestore().collection(this.getDestination(POINT_TAGS_DESTINATION_SLOT)).document(pointId).update(fields).get();
+        });
+    }
+
+    @Override
+    public CompletableFuture<Void> sendMessage(String deviceId, OutgoingPointMessage message)
+    {
+        return this.doAsync(() -> {
+            JSONObject jsonObject = new JSONObject(message.getMessageString());
+            if (!jsonObject.has(POINT_ID_VARIABLE))
+            {
+                throw new Exception("the pointId field is required in the json message");
+            }
+            String pointId = jsonObject.getString(POINT_ID_VARIABLE);
+
+            Map<String, Object> data = new HashMap<>();
+            jsonObject.keys().forEachRemaining(key -> data.put((String) key, jsonObject.get((String) key)));
+            this.getFirestore().collection(this.getDestination(POINT_VALUE_DESTINATION_SLOT)).document(pointId).update(data).get();
+        });
+    }
+
+    @Override
+    public CompletableFuture<Void> sendState(String deviceId, OutgoingPointMessage message)
+    {
+        return this.doAsync(() -> {
+            JSONObject jsonObject = new JSONObject(message.getMessageString());
+            if (!jsonObject.has(POINT_ID_VARIABLE))
+            {
+                throw new Exception("the pointId field is required in the json message");
+            }
+            String pointId = jsonObject.getString(POINT_ID_VARIABLE);
+
+            Map<String, Object> data = new HashMap<>();
+            jsonObject.keys().forEachRemaining(key -> data.put((String) key, jsonObject.get((String) key)));
+            this.getFirestore().collection(this.getDestination(POINT_STATUS_DESTINATION_SLOT)).document(pointId).update(data).get();
+        });
+    }
+
+    @Override
+    public CompletableFuture<Void> sendAlarm(String deviceId, OutgoingPointMessage message)
+    {
+        return this.doAsync(() -> {
+            JSONObject jsonObject = new JSONObject(message.getMessageString());
+            Map<String, Object> data = new HashMap<>();
+            jsonObject.keys().forEachRemaining(key -> data.put((String) key, jsonObject.get((String) key)));
+            this.getFirestore().collection(getDestination(DEVICE_ALARM_DESTINATION_SLOT)).add(data).get();
         });
     }
 
     @Override
     public void subscribeToIncomingMessages(String deviceId, BIIncomingMessageListener incomingMessageListener) throws Exception
     {
-        this.listeners.put(deviceId, incomingMessageListener);
+        if (!this.listeners.containsKey(deviceId))
+        {
+            this.listeners.put(deviceId, new HashSet<>());
+        }
+        this.listeners.get(deviceId).add(incomingMessageListener);
     }
 
     @Override
@@ -297,6 +375,34 @@ public class BFirebaseConnector extends BRealtimeConnector
     ////////////////////////////////////////////////////////////////
     // Utils
     ////////////////////////////////////////////////////////////////
+
+    /**
+     * Gets data destination
+     *
+     * @param slot
+     * @return
+     */
+    private String getDestination(String slot)
+    {
+        BDataDestinationEnum tagsDestination = (BDataDestinationEnum) this.getConfigSlot(slot);
+        if (tagsDestination == BDataDestinationEnum.pointsValuesCollection)
+        {
+            return POINTS_VALUES_COLLECTION;
+        }
+        if (tagsDestination == BDataDestinationEnum.pointsStatusCollection)
+        {
+            return POINTS_STATUSES_COLLECTION;
+        }
+        if (tagsDestination == BDataDestinationEnum.devicesCollection)
+        {
+            return DEVICES_COLLECTION;
+        }
+        if (tagsDestination == BDataDestinationEnum.alarmsCollection)
+        {
+            return ALARMS_COLLECTION;
+        }
+        return "unknown";
+    }
 
     /**
      * Remove null values
@@ -364,16 +470,18 @@ public class BFirebaseConnector extends BRealtimeConnector
                         try
                         {
                             String jsonMessage = new JSONObject(document.getDocument().getData()).toString();
-                            BFirebaseConnector.this.listeners.values().forEach(listener -> {
-                                try
+                            List<IIncomingMessage> messages = BFirebaseConnector.this.getMessageExtractor().getMessages(jsonMessage);
+                            for (IIncomingMessage message : messages)
+                            {
+                                if (message.getDeviceId() == null)
                                 {
-                                    listener.handleIncomingMessage(IncomingMessageFactory.create(jsonMessage));
+                                    BFirebaseConnector.this.getBLog().copy().eventName("IncomingMessage").failed().message("Device id is required for message: " + message.toString()).send();
                                 }
-                                catch (Exception e)
+                                if (BFirebaseConnector.this.listeners.containsKey(message.getDeviceId()))
                                 {
-                                    LOG.severe(e.getMessage());
+                                    BFirebaseConnector.this.listeners.get(message.getDeviceId()).forEach(listener -> listener.handleIncomingMessage(message));
                                 }
-                            });
+                            }
                         }
                         catch (Exception e)
                         {

@@ -4,4 +4,5 @@
   <type class="fr.btib.firebase.connector.BFirebaseDeviceExt" name="FirebaseDeviceExt"/>
   <type class="fr.btib.firebase.connector.BFirebasePointExt" name="FirebasePointExt"/>
   <type class="fr.btib.firebase.connector.BFirebaseAlarmRecipient" name="FirebaseAlarmRecipient"/>
+  <type class="fr.btib.firebase.connector.BDataDestinationEnum" name="DataDestinationEnum"/>
 </types>

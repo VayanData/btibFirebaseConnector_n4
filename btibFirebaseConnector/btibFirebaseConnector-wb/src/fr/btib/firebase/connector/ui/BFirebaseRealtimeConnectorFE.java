@@ -1,7 +1,7 @@
 package fr.btib.firebase.connector.ui;
 
 import fr.btib.connector.BExternalConnector;
-import fr.btib.connector.wb.ui.element.connector.realtime.BRealtimeConnectorFE;
+import fr.btib.connector.wb.fieldeditor.realtime.BRealtimeConnectorFE;
 import fr.btib.core.tool.BtibIconTool;
 import fr.btib.firebase.connector.BFirebaseConnector;
 
