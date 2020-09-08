@@ -13,7 +13,8 @@ import javax.baja.sys.*;
     name = "connector",
     type = "String",
     defaultValue = "",
-    facets = @Facet(name = "BFacets.FIELD_EDITOR", value = "\"btibFirebaseConnector:BFirebaseRealtimeConnectorFE\"")
+    facets = @Facet(name = "BFacets.FIELD_EDITOR", value = "\"btibFirebaseConnector:BFirebaseRealtimeConnectorFE\""),
+    override = true
 )
 @NiagaraType
 public class BFirebaseDeviceExt extends BDeviceRealtimeConnectorExt

@@ -14,7 +14,8 @@ import javax.baja.sys.*;
     name = "connector",
     type = "String",
     defaultValue = "",
-    facets = @Facet(name = "BFacets.FIELD_EDITOR", value = "\"btibFirebaseConnector:FirebaseRealtimeConnectorFE\"")
+    facets = @Facet(name = "BFacets.FIELD_EDITOR", value = "\"btibFirebaseConnector:FirebaseRealtimeConnectorFE\""),
+    override = true
 )
 @NiagaraType
 public class BFirebaseAlarmRecipient extends BRealtimeAlarmRecipient
