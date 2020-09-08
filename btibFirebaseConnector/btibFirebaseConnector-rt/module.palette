@@ -11,6 +11,7 @@
         <p n="Extensions" t="b:UnrestrictedFolder">
             <p n="FirebaseDeviceExt" t="bfc:FirebaseDeviceExt"/>
             <p n="FirebasePointExt" t="bfc:FirebasePointExt"/>
+            <p n="FirebaseReferenceExt" t="bfc:FirebaseReferenceExt"/>
         </p>
     </p>
 </bajaObjectGraph>
