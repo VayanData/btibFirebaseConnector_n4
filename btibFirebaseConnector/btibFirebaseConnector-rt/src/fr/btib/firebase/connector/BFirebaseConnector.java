@@ -103,7 +103,7 @@ public class BFirebaseConnector extends BRealtimeConnector
     private static final String POINTS_STATUSES_COLLECTION = "pointsStatus";
     private static final String MESSAGES_COLLECTION = "messages";
     // the workers thread pool
-    private final ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) Executors::newCachedThreadPool);
+    private final ExecutorService executorService = AccessController.doPrivileged((PrivilegedAction<ExecutorService>) () -> Executors.newCachedThreadPool(new DefaultThreadFactory(this.getName() + ":Service")));
     // Devices incoming messages listeners
     private final Map<String, Set<BIIncomingMessageListener>> listeners = new HashMap<>();
     private FirebaseApp firebaseApp = null;
@@ -131,7 +131,7 @@ public class BFirebaseConnector extends BRealtimeConnector
     }
 
     ////////////////////////////////////////////////////////////////
-    // BrealtimeConnector
+    // BRealtimeConnector
     ////////////////////////////////////////////////////////////////
 
     @Override
@@ -184,6 +184,18 @@ public class BFirebaseConnector extends BRealtimeConnector
     public Class<? extends BIRealtimeDeviceExtension> getDeviceExtensionClass()
     {
         return BFirebaseDeviceExt.class;
+    }
+
+    @Override
+    public Class<? extends BIRealtimePointExtension> getReferenceExtensionClass()
+    {
+        return BFirebaseReferenceExt.class;
+    }
+
+    @Override
+    public Class<? extends BIRealtimeDeviceExtension> getAlarmRecipientExtensionClass()
+    {
+        return BFirebaseAlarmRecipient.class;
     }
 
     @Override
@@ -250,7 +262,7 @@ public class BFirebaseConnector extends BRealtimeConnector
             this.clearNulls(tags);
             Map<String, Object> fields = new HashMap<>();
             fields.put("tags", tags);
-            this.getFirestore().collection(getDestination(DEVICE_TAGS_DESTINATION_SLOT)).document(deviceId).set(fields).get();
+            this.getFirestore().collection(this.getDestination(DEVICE_TAGS_DESTINATION_SLOT)).document(deviceId).set(fields).get();
         });
     }
 
@@ -266,6 +278,7 @@ public class BFirebaseConnector extends BRealtimeConnector
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public CompletableFuture<Void> sendMessage(String deviceId, OutgoingPointMessage message)
     {
         return this.doAsync(() -> {
@@ -306,7 +319,7 @@ public class BFirebaseConnector extends BRealtimeConnector
             JSONObject jsonObject = new JSONObject(message.getMessageString());
             Map<String, Object> data = new HashMap<>();
             jsonObject.keys().forEachRemaining(key -> data.put((String) key, jsonObject.get((String) key)));
-            this.getFirestore().collection(getDestination(DEVICE_ALARM_DESTINATION_SLOT)).add(data).get();
+            this.getFirestore().collection(this.getDestination(DEVICE_ALARM_DESTINATION_SLOT)).add(data).get();
         });
     }
 
